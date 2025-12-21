@@ -227,19 +227,21 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 	}).SetSelectedBackgroundColor(secondaryColor)
 
 	// Add enabled editors dynamically
-	enabledEditors := l.Config.GetEnabledEditors()
-	// Sort editors by display name for consistent ordering
-	sort.Slice(enabledEditors, func(i, j int) bool {
-		return enabledEditors[i].DisplayName < enabledEditors[j].DisplayName
-	})
-	for _, editor := range enabledEditors {
-		editorCmd := editor.Command
-		editorName := editor.DisplayName
-		l.ActionList.AddItem("Open "+editorName, "", 0, func() {
-			if err := utils.OpenEditor(editorCmd, ".", l.Log); err != nil {
-				l.Log("Failed to open %s: %v", editorName, err)
-			}
-		}).SetSelectedBackgroundColor(secondaryColor)
+	if l.Config != nil {
+		enabledEditors := l.Config.GetEnabledEditors()
+		// Sort editors by display name for consistent ordering
+		sort.Slice(enabledEditors, func(i, j int) bool {
+			return enabledEditors[i].DisplayName < enabledEditors[j].DisplayName
+		})
+		for _, editor := range enabledEditors {
+			editorCmd := editor.Command
+			editorName := editor.DisplayName
+			l.ActionList.AddItem("Open "+editorName, "", 0, func() {
+				if err := utils.OpenEditor(editorCmd, ".", l.Log); err != nil {
+					l.Log("Failed to open %s: %v", editorName, err)
+				}
+			}).SetSelectedBackgroundColor(secondaryColor)
+		}
 	}
 
 	l.ActionList.AddItem("Remove Worktree", "", 0, func() {
@@ -309,6 +311,11 @@ func (l *Layout) showWorktreeModal(path string) {
 }
 
 func (l *Layout) showSettingsModal(path string) {
+	if l.Config == nil {
+		l.Log("Configuration not available")
+		return
+	}
+
 	settingsModal := tview.NewForm()
 	settingsModal.
 		SetBorder(true).
