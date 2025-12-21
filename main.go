@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"worktree/internal/config"
 	"worktree/internal/layout"
 
 	"github.com/rivo/tview"
@@ -34,9 +35,14 @@ func main() {
 }
 
 func cmd(c *cli.Context) error {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Printf("Warning: failed to load config, using defaults: %v", err)
+	}
+
 	app := tview.NewApplication()
 
-	layout := layout.NewLayout(app, entryPoint)
+	layout := layout.NewLayout(app, entryPoint, cfg)
 	layout.SetupLayoutContentMenus(entryPoint)
 
 	if err := layout.SetRoot(); err != nil {
