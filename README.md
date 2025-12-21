@@ -2,6 +2,8 @@
 
 A terminal UI application for managing multiple Git repositories using Git's native worktree feature. Create isolated branches with separate working directories and open them in your favorite IDE.
 
+**[View Interactive Demo](https://hamid-faridafshar.github.io/worktree-landing/)**
+
 ## Preview
 
 **Main Screen** - Repository list with actions and worktrees:
