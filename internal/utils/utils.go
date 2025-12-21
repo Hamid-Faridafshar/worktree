@@ -281,3 +281,19 @@ func OpenCursor(path string, logger func(format string, args ...interface{})) er
 	cmd := exec.Command("cursor", path)
 	return cmd.Start()
 }
+
+// OpenEditor opens a path in the specified editor command
+func OpenEditor(command string, path string, logger func(format string, args ...interface{})) error {
+	logger("Opening %s ...", command)
+	// Only VS Code-compatible editors (code, cursor) understand workspace.code-workspace files
+	if command == "code" || command == "cursor" {
+		workspaceFile := "workspace.code-workspace"
+		_, err := os.Stat(filepath.Join(path, workspaceFile))
+		if !os.IsNotExist(err) {
+			path = filepath.Join(path, workspaceFile)
+		}
+	}
+
+	cmd := exec.Command(command, path)
+	return cmd.Start()
+}

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"worktree/internal/config"
 	"worktree/internal/utils"
 
 	"github.com/gdamore/tcell/v2"
@@ -74,9 +76,10 @@ type Layout struct {
 	ActionList    *tview.List
 	LogText       *tview.TextView
 	WorktreeModal *tview.Form
+	Config        *config.Config
 }
 
-func NewLayout(app *tview.Application, entryPoint string) *Layout {
+func NewLayout(app *tview.Application, entryPoint string, cfg *config.Config) *Layout {
 	logView := CreateLogView()
 	actionList := CreateActionList()
 
@@ -107,6 +110,7 @@ func NewLayout(app *tview.Application, entryPoint string) *Layout {
 		ActionList:    actionList,
 		LogText:       logView,
 		WorktreeModal: worktreeModal,
+		Config:        cfg,
 	}
 }
 
@@ -168,6 +172,10 @@ func (l *Layout) setupActions(path string) {
 		l.App.SetFocus(l.LeftList)
 	}).SetSelectedBackgroundColor(secondaryColor)
 
+	l.ActionList.AddItem(" Settings", "", 0, func() {
+		l.showSettingsModal(path)
+	}).SetSelectedBackgroundColor(secondaryColor)
+
 	l.ActionList.AddItem(" Add New Worktree", "", 0, func() {
 		l.showWorktreeModal(path)
 	}).SetSelectedBackgroundColor(secondaryColor)
@@ -218,17 +226,23 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 		l.App.SetFocus(l.ActionList)
 	}).SetSelectedBackgroundColor(secondaryColor)
 
-	// l.ActionList.AddItem("Open VSCode", "", 0, func() {
-	// 	if err := utils.OpenVSCode(".", l.Log); err != nil {
-	// 		l.Log("Failed to open vscode: %v", err)
-	// 	}
-	// }).SetSelectedBackgroundColor(secondaryColor)
-
-	l.ActionList.AddItem("Open Cursor", "", 0, func() {
-		if err := utils.OpenCursor(".", l.Log); err != nil {
-			l.Log("Failed to open cursor: %v", err)
+	// Add enabled editors dynamically
+	if l.Config != nil {
+		enabledEditors := l.Config.GetEnabledEditors()
+		// Sort editors by display name for consistent ordering
+		sort.Slice(enabledEditors, func(i, j int) bool {
+			return enabledEditors[i].DisplayName < enabledEditors[j].DisplayName
+		})
+		for _, editor := range enabledEditors {
+			editorCmd := editor.Command
+			editorName := editor.DisplayName
+			l.ActionList.AddItem("Open "+editorName, "", 0, func() {
+				if err := utils.OpenEditor(editorCmd, ".", l.Log); err != nil {
+					l.Log("Failed to open %s: %v", editorName, err)
+				}
+			}).SetSelectedBackgroundColor(secondaryColor)
 		}
-	}).SetSelectedBackgroundColor(secondaryColor)
+	}
 
 	l.ActionList.AddItem("Remove Worktree", "", 0, func() {
 		if err := utils.RemoveWorktree(path, selectedWorktree, l.Log); err != nil {
@@ -294,4 +308,83 @@ func (l *Layout) showWorktreeModal(path string) {
 
 	// Set the overlay as the root and focus on the modal
 	l.App.SetRoot(modalOverlay(), true).SetFocus(l.WorktreeModal)
+}
+
+func (l *Layout) showSettingsModal(path string) {
+	if l.Config == nil {
+		l.Log("Configuration not available")
+		return
+	}
+
+	settingsModal := tview.NewForm()
+	settingsModal.
+		SetBorder(true).
+		SetTitle("Settings - Toggle IDEs").
+		SetTitleColor(textColor).
+		SetBorderColor(borderColor).
+		SetBackgroundColor(secondaryColor)
+
+	// Get sorted list of editor keys for consistent ordering
+	var editorKeys []string
+	for key := range l.Config.Editors {
+		editorKeys = append(editorKeys, key)
+	}
+	sort.Strings(editorKeys)
+
+	// Add checkbox for each editor
+	for _, key := range editorKeys {
+		editor := l.Config.Editors[key]
+		editorKey := key
+		settingsModal.AddCheckbox(editor.DisplayName, editor.Enabled, func(checked bool) {
+			if e, exists := l.Config.Editors[editorKey]; exists {
+				e.Enabled = checked
+				l.Config.Editors[editorKey] = e
+			}
+		})
+	}
+
+	settingsModal.AddButton("Save", func() {
+		if err := config.SaveConfig(l.Config); err != nil {
+			l.Log("Failed to save config: %v", err)
+		} else {
+			l.Log("Settings saved successfully")
+		}
+		l.dismissModal()
+		l.setupActions(path)
+		l.App.SetFocus(l.ActionList)
+	})
+
+	settingsModal.AddButton("Cancel", func() {
+		// Reload config to discard changes
+		if cfg, err := config.LoadConfig(); err == nil {
+			l.Config = cfg
+		}
+		l.dismissModal()
+		l.App.SetFocus(l.ActionList)
+	})
+
+	settingsModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			// Reload config to discard changes
+			if cfg, err := config.LoadConfig(); err == nil {
+				l.Config = cfg
+			}
+			l.dismissModal()
+			l.App.SetFocus(l.ActionList)
+		}
+		return event
+	})
+
+	// Create overlay
+	modalOverlay := func() tview.Primitive {
+		return tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(settingsModal, 0, 1, true).
+				AddItem(nil, 0, 1, false), 0, 2, true).
+			AddItem(nil, 0, 1, false)
+	}
+
+	l.App.SetRoot(modalOverlay(), true).SetFocus(settingsModal)
 }
