@@ -38,6 +38,7 @@ func cmd(c *cli.Context) error {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Printf("Warning: failed to load config, using defaults: %v", err)
+		cfg = config.DefaultConfig()
 	}
 
 	app := tview.NewApplication()
